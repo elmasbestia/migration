@@ -1,0 +1,11 @@
+{
+  "name": "migration",
+  "version": "1.0.0",
+  "description": "Migration from json to Mongo",
+  "main": "migration.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Rafa Gomez https://rafagomez.neocities.org",
+  "license": "MIT"
+}
