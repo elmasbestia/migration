@@ -10,54 +10,75 @@ if (!cuantos) {
 }
 
 function combina() {
+	console.log ("2. Consolida Datos");
+
 	let fs = require("fs")
 	let clientes    = JSON.parse(fs.readFileSync('m3-customer-data.json', 'utf8'));
 	let direcciones = JSON.parse(fs.readFileSync('m3-customer-address-data.json', 'utf8'));
 	var campo;
-	
+
 	let completo = clientes.map((cliente, x) => {
 		for (campo in direcciones[x]) { cliente[campo] = direcciones[x][campo] }
+		return cliente;
 	})
+	
+	console.log("  ", completo.length, "registros");
 	
 	return completo
 }
 
-mongo.connect("mongodb://localhost:27017/", function(err, db) {
-	console.log("Pasó la entrada");
-	if (err) throw err;
-	var bdClientes = db.db("curso");
-  
-	console.log ("1. Consolida Datos");
-	var datos = combina();
-	console.log ("  ", datos.length, " registros.");
+function pica(arreglo, cant) {
+	// Divide un arreglo en un arreglo de arreglos de <cant> elementos
+	var x, hasta;
+	var lotes = [];
 	
-	var hasta = 0;
-	let lotes = [];
+	console.log("3. Separa lotes");
 	
-	console.log("2. Prepara lotes");
-	for (let x = 0; x < datos.length; x = hasta +1) {
-		hasta = x +cuantos -1;
-		console.log("  Prepara ", x, "a", hasta);
-		lotes.push((done) => {
-			bdClientes.collection("clientes").insert(datos.slice(x, hasta), function(err, res) {
-				console.log("Lote de ", x, "a", hasta);
-				done(err,res);
-			});
-		});
+	for (let x = 0; x < arreglo.length; x = hasta) {
+		hasta = x +cant;
+		lotes.push(arreglo.slice(x, hasta));
 	}
-	
-	console.log("3. Lanza los procesos");
-	async.parallel(lotes, (error, results) => {
-		if (error) return process.exit(1);
-		console.log(results.length, " lotes");
-		console.log(results);
+	console.log("  ", lotes.length, "lotes");
+	return lotes;
+}
+
+mongo.connect("mongodb://localhost:27017/", function(err, db) {
+	if (err) throw err;
+
+	var bdClientes = db.db("curso").collection("clientes");
+
+	console.log ("1. Limpia la B.D.");
+	bdClientes.deleteMany({}, (err, ack) => {
+		if (err) throw err;
+
+		console.log("  ", ack.deletedCount, "registros eliminados.");
+		
+		let lotes = pica(combina(),cuantos);
+
+		console.log("4. Lanza los procesos");
+		async.parallel(lotes.map(
+			(lote, x) => 
+				bdClientes.insert(lote, (err, res) => {
+					if (err) throw err;
+					done(err,res);
+				}
+			)),
+			(error, results) => {
+				if (error) throw error;
+
+				results.forEach((res,x) => { 
+					console.log("*************************************");
+					console.log(" Lote. Resultado: ");
+					console.log(res.result)
+					console.log("*************************************");
+				})
+			});
 	});
+});
 
-	db.close();
-	console.log("Proceso concluido");
-}); 
-
-process.exit();
+function done(err, res) {
+	console.log("Alguien llamó a 'done' con:", err, ",", res);
+}
 
 function Evalua(lotes) {
 	const benchmark = require('benchmark');
