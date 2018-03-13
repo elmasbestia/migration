@@ -2,6 +2,7 @@
 
 const mongo = require('mongodb').MongoClient;
 const async = require('async');
+const fs = require("fs")
 
 var cuantos = parseInt(process.argv[2], 10);
 if (!cuantos) {
@@ -12,7 +13,6 @@ if (!cuantos) {
 function combina() {
 	console.log ("2. Consolida Datos");
 
-	let fs = require("fs")
 	let clientes    = JSON.parse(fs.readFileSync('m3-customer-data.json', 'utf8'));
 	let direcciones = JSON.parse(fs.readFileSync('m3-customer-address-data.json', 'utf8'));
 	var campo;
@@ -45,6 +45,8 @@ function pica(arreglo, cant) {
 mongo.connect("mongodb://localhost:27017/", function(err, db) {
 	if (err) throw err;
 
+	var registrados = 0;
+
 	var bdClientes = db.db("curso").collection("clientes");
 
 	console.log ("1. Limpia la B.D.");
@@ -56,29 +58,73 @@ mongo.connect("mongodb://localhost:27017/", function(err, db) {
 		let lotes = pica(combina(),cuantos);
 
 		console.log("4. Lanza los procesos");
+		var debut = new Date();
+		
 		async.parallel(lotes.map(
-			(lote, x) => 
+			(lote, x) => function (done) {
 				bdClientes.insert(lote, (err, res) => {
 					if (err) throw err;
 					done(err,res);
 				}
-			)),
-			(error, results) => {
-				if (error) throw error;
+			)}),
+			(err, res) => {
+				if (err) throw error;
+				
+				var resultado = new Resultado(debut, cuantos, res.reduce((total, x) => total +x.result.n,0), res.length);
 
-				results.forEach((res,x) => { 
-					console.log("*************************************");
-					console.log(" Lote. Resultado: ");
-					console.log(res.result)
-					console.log("*************************************");
-				})
+				mstResultados(resultado);
+				
+				// Fin del proceso
+				process.exit(0);
 			});
 	});
 });
 
-function done(err, res) {
-	console.log("Alguien llamó a 'done' con:", err, ",", res);
+function mstResultados(resultado) {
+	const nbArch = 'Resultados.json';
+
+	function mstT(res) {
+		console.log(res.muestra());
+	}
+	
+	let fResultados = [];
+	
+	console.log("----");
+	mstT(resultado);
+				
+	if (fs.existsSync(nbArch)) {
+		fResultados = JSON.parse(fs.readFileSync(nbArch, 'utf8')).map(x => new Resultado(x));
+		
+		console.log();
+		console.log("Resultados anteriores:");
+		fResultados.forEach(x => { mstT(x)});
+	}
+			
+	fResultados.push(resultado);
+	
+	fs.writeFileSync(nbArch, JSON.stringify(fResultados))
+	console.log("Los resultados fueron guardados en", nbArch)
 }
+
+function Resultado (debut, cuantos, registrados, lotes) {
+	
+	if (cuantos) {
+		this.debut = debut;
+		this.fin = new Date();
+		this.cuantos = cuantos;
+		this.lotes = lotes;
+		this.registrados = registrados;
+	} else {
+		this.debut = new Date(debut.debut);
+		this.fin = new Date(debut.fin);
+		this.cuantos = debut.cuantos;
+		this.lotes = debut.lotes;
+		this.registrados = debut.registrados;
+	}
+	this.t = () => this.fin - this.debut;
+	this.muestra = () => this.registrados +" documentos insertados en " +this.t() +"ms. en " +this.lotes +" lotes de " +this.cuantos +" documentos";
+}
+
 
 function Evalua(lotes) {
 	const benchmark = require('benchmark');
